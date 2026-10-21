@@ -1,0 +1,22 @@
+Exercise 5: Warp Scheduling and Grid Dimensioning Analysis
+
+1. Why THREADS_PER_BLOCK Must Be a Multiple of 32:
+The Streaming Multiprocessor (SM) schedules and executes GPU instructions at the hardware level in lockstep batches of 32 threads known as warps. If the number of threads per block is not an exact integer multiple of 32, the final warp in every block will be only partially populated. Because the hardware warp scheduler still allocates a full 32-thread issue slot for every warp, any unpopulated lanes remain idle, wasting compute slots and register allocations. Setting THREADS_PER_BLOCK to a multiple of 32 (such as 512, which equals exactly 16 full warps) ensures that every warp in each block operates at 100% occupancy.
+
+2. Tradeoff Comparison: 500 Threads vs. 512 Threads per Block (N = 10,000,000):
+
+- Configuration A: 500 Threads per Block
+  * Total Blocks Launched: ceil(10,000,000 / 500) = 20,000 blocks.
+  * Total Threads Launched: 20,000 * 500 = 10,000,000 threads.
+  * Apparent Advantage: Matches N exactly with zero excess threads at the tail end of the grid.
+  * Severe Hardware Inefficiency: Within EVERY single block of the 20,000 blocks, 500 threads comprise 15 full warps (480 threads) plus a 16th warp with only 20 active threads and 12 idle lanes (32 - 20 = 12).
+  * Total Idle Warp Lanes: 20,000 blocks * 12 idle lanes = 240,000 wasted execution slots across the grid.
+
+- Configuration B: 512 Threads per Block (Multiple of 32)
+  * Total Blocks Launched: ceil(10,000,000 / 512) = 19,532 blocks.
+  * Total Threads Launched: 19,532 * 512 = 10,000,384 threads.
+  * Per-Block Efficiency: The first 19,531 blocks run at 100% warp utilization (all 16 warps per block are completely filled).
+  * Boundary Masking ("Tail Waste"): Only the final block (block index 19,531) contains excess threads: 10,000,384 - 10,000,000 = 384 threads that are harmlessly masked out by the boundary check `if (i < n)`.
+
+- Conclusion:
+  Wasting 384 thread lanes only in the very last block (with 512 threads/block) is vastly superior to wasting 12 thread lanes across all 20,000 blocks (240,000 wasted slots with 500 threads/block). Hardware warp alignment within blocks is significantly more impactful for GPU performance than whole-grid boundary alignment.

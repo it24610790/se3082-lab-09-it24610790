@@ -1,0 +1,11 @@
+1. Host vs. Device Memory Spaces:
+The CPU (host) and GPU (device) maintain physically separate address spaces and independent memories (Host RAM vs. Device VRAM). The CUDA kernel executes on GPU Streaming Multiprocessors (SMs), meaning it can only dereference pointers that refer to device memory. Normal host variables (such as a, b, and c) are located in system RAM; attempting to access host pointers directly from GPU kernel code leads to invalid memory access errors. Therefore, memory must be explicitly allocated in GPU VRAM using cudaMalloc (yielding device pointers d_a, d_b, and d_c) prior to kernel execution.
+
+2. Pointer Passing: cudaMemcpy vs. Kernel Launch:
+- In cudaMemcpy(d_a, &a, size, cudaMemcpyHostToDevice), the variable 'a' is a scalar stack integer residing in host RAM. Passing '&a' provides cudaMemcpy with a pointer (memory address) to locate and read source bytes from the host. Conversely, 'd_a' is already a pointer holding the target device address.
+- In the kernel launch add<<<1, 1>>>(d_a, d_b, d_c), the kernel function signature expects pointer arguments (int *a, int *b, int *c). Because 'd_a' is already a pointer referencing the allocated GPU memory space, it is passed directly by value without an address-of (&) operator.
+
+3. Thread Count and Execution Behavior:
+- The configuration <<<1, 1>>> specifies a single block containing a single thread, so exactly 1 thread executes the kernel.
+- If changed to <<<1, 10>>>, the kernel dispatches 1 block with 10 threads, resulting in 10 threads executing concurrently.
+- The computed result will NOT change. Because the kernel computes *c = *a + *b without utilizing threadIdx.x or blockIdx.x to partition work, all 10 threads execute identical instructions on the same data. Every thread redundantly writes the same sum (9) to the same memory location (*c). While this represents a benign write race condition, the resulting value stored in memory remains correct.

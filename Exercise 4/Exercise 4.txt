@@ -1,0 +1,15 @@
+Exercise 4: Investigating Block Thread Limits (N = 2048)
+
+1. Experimental Outcome:
+When N is set to 2048 with the launch configuration addT<<<1, N>>>(d_a, d_b, d_c), the kernel fails immediately at invocation time. The terminal output reports:
+"Kernel launch failed: invalid configuration argument"
+As a result of the launch failure, no GPU instructions are executed, and the output array elements remain 0 after copying back from the device.
+
+2. Root Cause (Hardware Architecture Limit):
+On NVIDIA CUDA GPU architectures (Compute Capability 2.0 through Hopper and Blackwell), there is an architectural hardware limit of 1024 maximum threads per thread block (cudaDeviceProp::maxThreadsPerBlock = 1024). Requesting 2048 threads within a single block violates this physical capability.
+
+3. Error Detection via CUDA Runtime:
+The CUDA driver and runtime detect the out-of-bounds block dimension prior to kernel dispatch, failing the call and recording the error code cudaErrorInvalidConfiguration (Error Code 9). The error-handling routine cudaGetLastError() intercepts this status and outputs the descriptive error message instead of crashing the program.
+
+4. Architectural Solution:
+To process datasets larger than 1024 elements (such as N = 2048), the problem must be partitioned across multiple blocks (for example, <<<2, 1024>>> or <<<4, 512>>>), combining blockIdx.x and threadIdx.x to compute the global 1D index: int i = blockIdx.x * blockDim.x + threadIdx.x.
